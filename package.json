@@ -1,0 +1,26 @@
+{
+  "name": "allgames",
+  "version": "3.0.0",
+  "description": "Raspberry pi realtime data server based on node.js express and socket.io.",
+  "main": "allGamesLobbyServer.js",
+  "dependencies": {
+    "express": "^4.16.4",
+    "jasmine": "^3.5.0",
+    "socket.io": "^2.2.0",
+    "uid": "^2.0.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "jasmine"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spencermathias/allGameLobby"
+  },
+  "author": "spencer Mathias",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/spencermathias/allGameLobby/issues"
+  },
+  "homepage": "https://github.com/spencermathias/allGameLobby#readme"
+}
