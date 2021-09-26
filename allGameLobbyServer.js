@@ -40,6 +40,7 @@ var chatColor = "#ffffff";
 var allforked={}
 var room=-1
 
+
 function defaultUserData(gameID){
 	if(gameID==undefined){
 		return {}
@@ -72,8 +73,8 @@ app.use('/lobbies',  function (req, res){
 	//res.send(q);
 });
 app.use('/avalibleGames',  function (req, res){
-	avalibleGames=getGames()
-	res.send(avalibleGames.keys());
+	getGames()
+	res.send(Object.keys(avalibleGames));
 	//res.send(q);
 });
 
@@ -145,7 +146,7 @@ io.sockets.on("connection", function(socket) {
 		console.log(type)
 		let connectorSocket={}
 		let newgame=''
-		avalibleGames=getGames()
+		getGames()
 		//TODO
 		
 		if(type in avalibleGames){
@@ -206,18 +207,43 @@ io.sockets.on("connection", function(socket) {
 });
 function getGames(){
 	const testFolder = './games/';
-	let fileList={}
 	fs.readdirSync(testFolder).forEach(file => {
 		try{
-			fileList[file]=require('/games/'+file+'/serverconfig')
+			let temp=require('./games/'+file+'/serverconfig.js')
+			let name=''
+			temp.dirName='./games/'+file
+			if(temp.name==undefined){
+				name=file
+			}else{
+				name=temp.name
+			}
+			if(avalibleGames[name]==undefined || !avalibleGames[name].folderExposed){
+				avalibleGames[name]=temp
+				app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+				folderExposed=true
+				if(avalibleGames[name].connect==undefined){
+					let namespace='/'+name+'Connect'
+					avalibleGames[name].connect=io.of(namespace+'/').on('connection',connectionFunction)
+				}
+			}else{
+				let currentGame=avalibleGames[name]
+				if(currentGame.clientFolder!=temp.clientFolder){
+					app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+				}
+				for(key of Object.keys(temp)){
+					if(key!="connect"){
+						currentGame[key]=temp[key]
+					}
+				}
+			}
 		}catch(err){
 			console.log('did not succesfuly import ',file)
 			console.log(file,' err ',err)
 		}
 	});
-	console.log(fileList)
-	return fileList
+	console.log(avalibleGames)
 }
+
 function message(socket, message, color){
 	var messageObj = {
 		data: "" + message,
@@ -310,6 +336,7 @@ function connectionFunction(socket){
 					console.log(__line,"removing "+allClients[player].userName+' ID of: '+player);
 					let message2server={command:'removePlayer',ID:player}
 					allforked[socket.userData.childProcessName].send(message2server)
+					message( socket.to(room), "" + socket.userData.userName + " has been removed.", serverColor);
 				}
 			}
 		}
@@ -318,23 +345,8 @@ function connectionFunction(socket){
 }
 app.use('/',express.static('./Lobby'))
 //app.use('/test',express.static('./testConnection'))
-app.use('/spoonsConnect',express.static('./htmlSpoons'))
-var spoonsConnect=io.of('/spoonsConnect/').on('connection',connectionFunction)
 
-app.use('/rageConnect',express.static('./htmlRage'))
-var rageConnect=io.of('/rageConnect/').on('connection',connectionFunction)
 
-app.use('/QuintoConnect',express.static('./htmlQuinto'))
-var quintoConnect=io.of('/quintoConnect/').on('connection',connectionFunction)
-
-app.use('/PitConnect',express.static('./htmlPit'))
-var pitConnect=io.of('/pitConnect/').on('connection',connectionFunction)
-
-app.use('/rackoConnect',express.static('./htmlRacko'))
-var rackoConnect=io.of('/rackoConnect/').on('connection',connectionFunction)
-
-app.use('/mooseConnect',express.static('./htmlMooseMt'))
-var mooseConnect=io.of('/mooseConnect/').on('connection',connectionFunction)
 
 
 //const second = fork('child.js');
