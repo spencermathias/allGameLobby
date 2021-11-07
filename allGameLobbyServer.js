@@ -5,17 +5,21 @@ var io = require('socket.io');
 var express = require('express'); // for serving webpages
 const fs = require('fs');// for geting file system
 //var conDB=require('./mysqlConfig/databaseLogin.js')
+const { createProxyMiddleware } = require('http-proxy-middleware');
+var httpProxy = require('http-proxy');
 var app = express();
 var uid =require( 'uid').uid;
-console.log(uid)
 var port=8081
+var url = require('url')
 
 var server = http.createServer(app).listen(port,"0.0.0.0",511,function(){console.log(__line,"Server connected to socket: "+port);});//Server listens on the port 8124
+var startPort=8010;
+var pathRewrites={}
 console.log('server started')
 io = io.listen(server);
 
 app.use(express.static('./IPconfiguration'))
-app.use(express.static('./gameHelperFunctions'))
+//app.use(express.static('./gameHelperFunctions'))
 var novelCount=0
 var IDs={
 	socketsIDs:{},
@@ -55,6 +59,7 @@ function defaultUserData(gameID){
 //to make lobbies work
 var activeGames = [];
 var avalibleGames = {}
+var avaliblePorts = [];
 /*
 conDB.connect(function(err) {
   if (err) throw err;
@@ -77,7 +82,20 @@ app.use('/avalibleGames',  function (req, res){
 	res.send(Object.keys(avalibleGames));
 	//res.send(q);
 });
-
+function nextPort(){
+    avaliblePorts=[]
+	let unavaliblePorts=activeGames.map(x=>x.port-startPort).sort((a, b) => a - b)
+	let currentPort=0
+	for(let i=0; i<unavaliblePorts.length; i++){
+		for(let j=currentPort; j<unavaliblePorts[i];j++){
+			avaliblePorts.push(j)
+		}
+        currentPort=unavaliblePorts[1]+1
+	}
+	if(unavaliblePorts.length==0){unavaliblePorts=[-1]}
+    avaliblePorts.push(unavaliblePorts.pop()+1)
+    return avaliblePorts.shift()+startPort
+}
 //connections to lobby
 io.sockets.on("connection", function(socket) {
 	socket.userData={}
@@ -154,10 +172,12 @@ io.sockets.on("connection", function(socket) {
 			room+=1
 			//socket.userData.myIDinGame=socket.id
 			//new forked
-			let forked = fork('game/'+avalibleGames[type].serverPath);
+			let port=nextPort()
+			console.log(port,'is passed port')
+			let forked = fork(avalibleGames[type].serverPath,[port],{cwd:'games/'+type+'/'});
 			//forked.send({ID:socket.userData.myIDinGame,command:'addPlayer'})
-			forked.room=''+newgame.split('Server')[0]+room
-			forked.connectorSocket=avalibleGames[type].connectorSocket
+			forked.room=type+room
+			//forked.connectorSocket=avalibleGames[type].connectorSocket
 			forked.disconnectedPlayers=[]
 			forked.on('message', (msg) => {
 				let playerID=msg.playerID
@@ -176,23 +196,26 @@ io.sockets.on("connection", function(socket) {
 					}
 					console.log('msg',msg)
 					console.log('room',forked.room)
-					forked.connectorSocket.in(forked.room).emit(command,data)
+					//forked.connectorSocket.in(forked.room).emit(command,data)
 				}else{
 					//debugger
 					console.log(__line,'child to '+playerID)
 					console.log(msg)
-					forked.connectorSocket.to(IDs.gameIDs[playerID]).emit(command,data)
+					//forked.connectorSocket.to(IDs.gameIDs[playerID]).emit(command,data)
 				}
 			});
 			forked.on('exit', function(code) {
 				console.log(`About to exit ${forked.room} with code ${code}`);
-				forked.connectorSocket.in(forked.room).emit('forward to room','/')
+				//forked.connectorSocket.in(forked.room).emit('forward to room','/')
 				delete allforked[forked.room]
 				activeGames=[]
 				for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
 			});
-			let forkedURL=`/${newgame.split('Server')[0]}Connect?ID=${forked.room}`
+			let forkedURL='/'+forked.room
+			options[forkedURL]='http://localhost:'+port
+			pathRewrites[forkedURL]=''
 			forked.URL=forkedURL
+			forked.port=port
 			socket.emit('forward to room',forkedURL)
 			
 			//load game files
@@ -219,8 +242,8 @@ function getGames(){
 			}
 			if(avalibleGames[name]==undefined || !avalibleGames[name].folderExposed){
 				avalibleGames[name]=temp
-				app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
-				folderExposed=true
+				//app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+				avalibleGames[name].folderExposed=true
 				if(avalibleGames[name].connect==undefined){
 					let namespace='/'+name+'Connect'
 					avalibleGames[name].connect=io.of(namespace+'/').on('connection',connectionFunction)
@@ -228,20 +251,20 @@ function getGames(){
 			}else{
 				let currentGame=avalibleGames[name]
 				if(currentGame.clientFolder!=temp.clientFolder){
-					app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+					//app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
 				}
-				for(key of Object.keys(temp)){
+				/*for(key of Object.keys(temp)){
 					if(key!="connect"){
 						currentGame[key]=temp[key]
 					}
-				}
+				}*/
 			}
 		}catch(err){
 			console.log('did not succesfuly import ',file)
-			console.log(file,' err ',err)
+			//console.log(file,' err ',err)
 		}
 	});
-	console.log(avalibleGames)
+	console.log(avalibleGames.Keys)
 }
 
 function message(socket, message, color){
