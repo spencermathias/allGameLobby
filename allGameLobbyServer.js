@@ -7,18 +7,20 @@ const fs = require('fs');// for geting file system
 //var conDB=require('./mysqlConfig/databaseLogin.js')
 const { createProxyMiddleware } = require('http-proxy-middleware');
 var httpProxy = require('http-proxy');
+const morgan = require('morgan');
 var app = express();
 var uid =require( 'uid').uid;
 var port=8081
 var url = require('url')
 
 var server = http.createServer(app).listen(port,"0.0.0.0",511,function(){console.log(__line,"Server connected to socket: "+port);});//Server listens on the port 8124
+
 var startPort=8010;
 var pathRewrites={}
 console.log('server started')
 io = io.listen(server);
 
-app.use(express.static('./IPconfiguration'))
+//app.use(express.static('./IPconfiguration'))
 //app.use(express.static('./gameHelperFunctions'))
 var novelCount=0
 var IDs={
@@ -82,6 +84,8 @@ app.use('/avalibleGames',  function (req, res){
 	res.send(Object.keys(avalibleGames));
 	//res.send(q);
 });
+app.use(morgan('dev'))
+
 function nextPort(){
     avaliblePorts=[]
 	let unavaliblePorts=activeGames.map(x=>x.port-startPort).sort((a, b) => a - b)
@@ -212,12 +216,18 @@ io.sockets.on("connection", function(socket) {
 				for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
 			});
 			let forkedURL='/'+forked.room
-			options[forkedURL]='http://localhost:'+port
-			pathRewrites[forkedURL]=''
-			forked.URL=forkedURL
+			//pathRewrites[forkedURL]=''
+			forked.URL=forkedURL+'/'
 			forked.port=port
-			socket.emit('forward to room',forkedURL)
-			
+			socket.emit('forward to room',forked.URL)
+			app.use(forked.URL,createProxyMiddleware({
+				target:'http://localhost:'+port,
+				changeOrigin:true,
+				pathRewrite:{
+					['^'+forked.URL]:''
+				},
+				ws:true
+			}));
 			//load game files
 
 			allforked[forked.room]=forked
