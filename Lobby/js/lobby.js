@@ -27,7 +27,7 @@ function loadgames(currentGames){
 }
 function createNewGame(type){
 	if(type!='Cancel'){
-		socket.emit('newgame',type)
+		//socket.emit('newgame',type)
 	}
 }
 function send2game(game){
@@ -49,65 +49,27 @@ function createServer(type){
 fetchlobbies()
 setInterval(fetchlobbies,9000)
 
+var url = "/newgame";
 
-//create socket
-var socket = io(window.location.href)//Addresses.publicAddress); //try public address //"24.42.206.240" for alabama
+var xhr = new XMLHttpRequest();
+xhr.open("POST", url);
 
-var trylocal = 0;
-socket.on('connect_error',function(error){
-	console.log("I got an error!", error);
-	console.log("socket to:", socket.disconnect().io.uri, "has been closed.");
-	if(!trylocal){ //prevent loops
-		if(window.location.href != internalAddress){
-			window.location.replace(internalAddress);
-		}
-		socket.io.uri = internalAddress;
-		console.log("Switching to local url:", socket.io.uri);
-		console.log("Connecting to:",socket.connect().io.uri);
-		trylocal = 1;
-	}
-});
+xhr.setRequestHeader("Content-Type", "application/json");
 
-socket.on('reconnect', function(attempt){
-	console.log("reconnect attempt number:", attempt);
-});
+xhr.onreadystatechange = function () {
+   if (xhr.readyState === 4) {
+      console.log(xhr);
+      console.log(xhr.responseText);
+   }};
 
-socket.on('connect', function(){
-	//get userName
-	console.log("Connection successful!");
-	/*if(localStorage.userName === undefined){
-		changeName(socket.id);
-	} else {
-		'userName', localStorage.userName;
-	}*/
-});
+var data = `{
+  "Id": 12345,
+  "Customer": "John Smith",
+  "Quantity": 1,
+  "Price": 10.00,
+  "type": "Quinto"
+}`;
+
+xhr.send(data);
 
 
-
-socket.on('getOldID',(callBack)=>{
-	let userName=''
-	if(localStorage.userName == undefined){
-		userName=changeName();
-		
-	} else {
-		userName=localStorage.userName;
-	}
-	callBack({ID:localStorage.id,name:userName})
-	localStorage.id = socket.id;
-})
-function changeName(){
-	var newUserName = null;
-	do{
-		newUserName = prompt('Enter username: ');
-		console.log(newUserName);
-		if ((newUserName == null || newUserName == "") && localStorage.userName !== undefined){
-			newUserName = localStorage.userName;
-		}
-	} while (newUserName === null);
-	localStorage.userName = newUserName;
-	return localStorage.userName;
-}
-socket.on('forward to room',(path)=>{
-	console.log('move to path:',path)
-	window.location.href=path
-})

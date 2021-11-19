@@ -1,90 +1,202 @@
 const { fork } = require('child_process');
 //const express = require('express');
 const http = require('http');
-var io = require('socket.io');
-var express = require('express'); // for serving webpages
+//var io = require('socket.io');
+//var express = require('express'); // for serving webpages
 const fs = require('fs');// for geting file system
 //var conDB=require('./mysqlConfig/databaseLogin.js')
-const { createProxyMiddleware } = require('http-proxy-middleware');
 var httpProxy = require('http-proxy');
-const morgan = require('morgan');
-var app = express();
+var HttpProxyRules = require('http-proxy-rules');
+//const morgan = require('morgan');
+//var app = express();
 var uid =require( 'uid').uid;
-var port=8081
-var url = require('url')
-
-var server = http.createServer(app).listen(port,"0.0.0.0",511,function(){console.log(__line,"Server connected to socket: "+port);});//Server listens on the port 8124
-
+var externalPort=8081
 var startPort=8010;
-var pathRewrites={}
-console.log('server started')
-io = io.listen(server);
+var lobbyPort=8080
+var url = require('url')
+var options={}//'/lobby':'http://localhost:8080'
+var sockets={}
 
-//app.use(express.static('./IPconfiguration'))
-//app.use(express.static('./gameHelperFunctions'))
-var novelCount=0
-var IDs={
-	socketsIDs:{},
-	gameIDs:{},
-	addID(socketsID){
-		let gameID=uid()+novelCount++
-		this.socketsIDs[socketsID]=gameID
-		this.gameIDs[gameID]=socketsID
-		return gameID
+
+
+  // Set up proxy rules instance
+  var proxyRules = new HttpProxyRules({
+    rules: options,
+    default: undefined//'http://localhost:'+lobbyPort // default target
+  });
+
+  var websiteRules = new HttpProxyRules({
+    rules: {
+		'/lobbies':'lobbyList',
+		'/avalibleGames':'avalibleGames',
+		'/newgame':'newGame',
+		'/js/jquery-3.1.1.js':'jquery',
+		'/js/lobby.js':'lobbyjs',
+		'/css/styles.css':'css'
 	},
-	updateID(oldID,newID){
-		let gameID=IDs.socketsIDs[oldID]
-		IDs.gameIDs[gameID]=newID
-		IDs.socketsIDs[newID]=gameID
-		delete IDs.socketsIDs[oldID]
+    default:'landing' // default target
+  });
+  
+  respondF={
+		'lobbyList':function (req, res){
+			res.writeHead(200, { 'Content-Type': 'text/plain' });
+			res.write(JSON.stringify(activeGames));
+			res.end()
+			console.log('in lobbies')
+		},
+		'avalibleGames':function (req, res){
+			getGames(); 
+			res.writeHead(200, { 'Content-Type': 'text/plain' });
+			res.write(JSON.stringify(Object.keys(avalibleGames)));
+			res.end()
+			console.log('in avalibleGames')
+			return res
+		},
+		newGame:async (req, res) => {
+			const buffers = [];
+
+			for await (const chunk of req) {
+				buffers.push(chunk);
+			}
+
+			const data = Buffer.concat(buffers).toString();
+			let type=JSON.parse(data).type
+			console.log(type); 
+			
+			let game={	sendTo:type,
+						url:createGame(type)
+					}
+			res.write(JSON.stringify(game))
+			res.end();
+		},
+		'landing':function(req,res){
+			//console.log(req)
+			res.writeHead(200, {
+		        'Content-Type': 'text/html'
+		    });
+		    fs.readFile('./lobby/landingpage.html', null, function (error, data) {
+		        if (error) {
+		            res.writeHead(404);
+		            res.write('Whoops! File not found!');
+		        } else {
+		            res.write(data);
+		        }
+		        res.end();
+		    })
+		},
+		css:function(req,res){
+			res.writeHead(200, {
+		        'Content-Type': 'text/css'
+		    });
+		    fs.readFile('./lobby/css/styles.css', null, function (error, data) {
+		        if (error) {
+		            res.writeHead(404);
+		            res.write('Whoops! File not found!');
+		        } else {
+		            res.write(data);
+		        }
+		        res.end();
+		    })
+		},
+		'jquery':function(req,res){
+			res.writeHead(200, {
+		        'Content-Type': 'application/javascript'
+		    });
+		    fs.readFile('./lobby/js/jquery-3.1.1.js', null, function (error, data) {
+		        if (error) {
+		            res.writeHead(404);
+		            res.write('Whoops! File not found!');
+		        } else {
+		            res.write(data);
+		        }
+		        res.end();
+		    });
+		},
+		'lobbyjs':function(req,res){
+			res.writeHead(200, {
+		        'Content-Type': 'application/javascript'
+		    });
+		    fs.readFile('./lobby/js/lobby.js', null, function (error, data) {
+		        if (error) {
+		            res.writeHead(404);
+		            res.write('Whoops! File not found!');
+		        } else {
+		            res.write(data);
+		        }
+		        res.end();
+		    });
+		},
+		
+  }
+  
+  // Create reverse proxy instance
+  var proxy = httpProxy.createProxy({ws:true});
+
+  // Create http server that leverages reverse proxy instance
+  // and proxy rules to proxy requests to different targets
+  server=http.createServer(function(req, res) {
+
+    // a match method is exposed on the proxy rules instance
+    // to test a request to see if it matches against one of the specified rules
+    //console.log(req.headers)
+	if(req.headers.referer!='http://alanisboard.ddns.net:8081/'){
+		origin={url:req.headers.referer}
+
+		var origTarget=proxyRules.match(origin);
+		sockets[req.headers.cookie]=origTarget
 	}
-}
-var allClients={}
-var gameStatus=1
-var serverColor='#000000'
-var chatColor = "#ffffff";
+	
+	var target = proxyRules.match(req);
+	
+	var info=websiteRules.match(req)
+	
+    if (target) {
+	  console.log(target)
+      return proxy.web(req, res, {
+        target: target,
+      });
+	}else if(sockets[req.headers.cookie]){
+	  console.log(sockets[req.headers.cookie])
+      return proxy.web(req, res, {
+        target: sockets[req.headers.cookie],
+		ws:true
+      });
+	}else if(info){
+		//console.log(respondF[info])
+		return respondF[info](req,res);
+	}else{
+		res.writeHead(500, { 'Content-Type': 'text/plain' });
+		console.log(req)
+		res.end('The request url and path did not match any of the listed rules!');
+	}
+  }).listen(externalPort);
+  server.on('upgrade', function (req, socket, head) {
+	let target = sockets[req.headers.cookie];
+	if (target) {
+		proxy.ws(req, socket, head, {target: target});
+	}
+});
+/*
+  server.on('upgrade', function (req, socket, head) {
+    var target = proxyRules.match(req);
+	console.log(req)
+    if (target) {
+		console.log('proxy ws',target)
+		return proxy.ws(req, socket,head, {
+			target: target,
+			ws:true
+		});
+    }
+})
+
+*/
+
 var allforked={}
 var room=-1
-
-
-function defaultUserData(gameID){
-	if(gameID==undefined){
-		return {}
-	}
-	return {
-		userName: "player"+gameID.slice(11),
-		childProcessName:'',
-		myIDinGame:gameID
-	}
-}
-
-//to make lobbies work
 var activeGames = [];
 var avalibleGames = {}
 var avaliblePorts = [];
-/*
-conDB.connect(function(err) {
-  if (err) throw err;
-});
-function getGameIDCallBack(err, result, fields) {
-  //console.log(__line,"aaaaaaaaaaaaaaaaa", err, result);
-  if (err) throw err;
-   activeGames = result;
-}
-let queryReadyGames = " SELECT ID, type FROM allGames WHERE Status = 'ready' ORDER BY id DESC";
-conDB.query(queryReadyGames, getGameIDCallBack)
-setInterval(()=>conDB.query(queryReadyGames, getGameIDCallBack),10000)
-*/
-app.use('/lobbies',  function (req, res){
-	res.send(activeGames);
-	//res.send(q);
-});
-app.use('/avalibleGames',  function (req, res){
-	getGames()
-	res.send(Object.keys(avalibleGames));
-	//res.send(q);
-});
-app.use(morgan('dev'))
+
 
 function nextPort(){
     avaliblePorts=[]
@@ -100,144 +212,8 @@ function nextPort(){
     avaliblePorts.push(unavaliblePorts.pop()+1)
     return avaliblePorts.shift()+startPort
 }
-//connections to lobby
-io.sockets.on("connection", function(socket) {
-	socket.userData={}
-	//let roomname=socket.conn.request._query.ID
-	console.log(__line, "lobby Connection with client " + socket.id +" established in room: lobby");
-	//socket.join(roomname)
-	socket.emit('getOldID',(data)=>{
-		console.log('this is data ',data)
-		let gameID=IDs.socketsIDs[data.ID]
-		console.log('current IDs ',IDs)
-		console.log('gameID',gameID)
-		//console.log('allforked',allforked)
-		if(gameID!=undefined){
-			console.log('not undefined gameID',gameID)
-			IDs.updateID(data.ID,socket.id)
-			socket.userData=allClients[gameID]
-			allClients[socket.userData.myIDinGame].childProcessName='inMainLobby'
-		}else{
-			gameID=IDs.addID(socket.id)
-			allClients[gameID]=defaultUserData(gameID)
-			allClients[gameID].userName=data.name
-		}
-	})
-	
-	message(socket, "Connection established!", serverColor)
 
-    console.log(__line, "Socket.io Connection with client " + socket.id +" established");
 
-    socket.on("disconnect",function() {
-		message( io.sockets, "" + socket.userData.userName + " has left.", serverColor);
-		message( io.sockets, "Type 'kick' to kick disconnected players", serverColor);
-        console.log(__line,"disconnected: " + socket.userData.userName + ": " + socket.id);
-        //let i = allClients.indexOf(socket);
-        //if(i >= 0){ allClients.splice(i, 1); }
-		//i = spectators.indexOf(socket);
-        //if(i >= 0){ spectators.splice(i, 1); }
-        // if(gameStatus!=gameMode.LOBBY){
-        // 	let i = players.indexOf(socket)
-        // 	if(i >= 0){players.disconnected=true}
-        // }
-		//updateUsers();
-        //players are only removed if kicked
-    });
-	
-
-    socket.on("message",function(data) {
-        /*This event is triggered at the server side when client sends the data using socket.send() method */
-        data = JSON.parse(data);
-
-        console.log(__line, "data: ", data);
-        /*Printing the data */
-		message( socket, "You: " + data.message, chatColor);
-		message( socket.broadcast, "" + socket.userData.userName + ": " + data.message, chatColor);
-        /*Sending the Acknowledgement back to the client , this will trigger "message" event on the clients side*/
-    });
-
-    // socket.on("userName", function(userName) {
-        // allClients[socket.userData.myIDinGame].userName=userName
-		// socket.userData.userName = userName;
-        // console.log(__line,"user changed name " + socket.userData.userName);
-		// message(io.sockets, "" + socket.userData.userName + " has changed name", serverColor);
-        // //updateUsers();
-    // });
-
-    socket.on('newgame',(type)=>{
-		console.log(type)
-		let connectorSocket={}
-		let newgame=''
-		getGames()
-		//TODO
-		
-		if(type in avalibleGames){
-			console.log('valid game')
-			room+=1
-			//socket.userData.myIDinGame=socket.id
-			//new forked
-			let port=nextPort()
-			console.log(port,'is passed port')
-			let forked = fork(avalibleGames[type].serverPath,[port],{cwd:'games/'+type+'/'});
-			//forked.send({ID:socket.userData.myIDinGame,command:'addPlayer'})
-			forked.room=type+room
-			//forked.connectorSocket=avalibleGames[type].connectorSocket
-			forked.disconnectedPlayers=[]
-			forked.on('message', (msg) => {
-				let playerID=msg.playerID
-				let command=msg.command
-				let data=msg.data
-				if(playerID=='all'){
-					console.log(__line,'child to all:');
-					if(command=='userList'){
-						for(user of data){
-							if(user.ID!=undefined){
-								user.userName=allClients[user.ID].userName
-								user.ID=IDs.gameIDs[user.ID]
-								console.log(__line,user)
-							}else{user.id=IDs.gameIDs[user.id]}
-						}
-					}
-					console.log('msg',msg)
-					console.log('room',forked.room)
-					//forked.connectorSocket.in(forked.room).emit(command,data)
-				}else{
-					//debugger
-					console.log(__line,'child to '+playerID)
-					console.log(msg)
-					//forked.connectorSocket.to(IDs.gameIDs[playerID]).emit(command,data)
-				}
-			});
-			forked.on('exit', function(code) {
-				console.log(`About to exit ${forked.room} with code ${code}`);
-				//forked.connectorSocket.in(forked.room).emit('forward to room','/')
-				delete allforked[forked.room]
-				activeGames=[]
-				for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
-			});
-			let forkedURL='/'+forked.room
-			//pathRewrites[forkedURL]=''
-			forked.URL=forkedURL+'/'
-			forked.port=port
-			socket.emit('forward to room',forked.URL)
-			app.use(forked.URL,createProxyMiddleware({
-				target:'http://localhost:'+port,
-				changeOrigin:true,
-				pathRewrite:{
-					['^'+forked.URL]:''
-				},
-				ws:true
-			}));
-			//load game files
-
-			allforked[forked.room]=forked
-			activeGames=[]
-			for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
-		}
-    });
-    socket.on('test',()=>{console.log('tested parent')});
-    //socket.on('pass2game',(name,gamecomand)=>{})
-});
 function getGames(){
 	const testFolder = './games/';
 	fs.readdirSync(testFolder).forEach(file => {
@@ -277,126 +253,50 @@ function getGames(){
 	console.log(avalibleGames.Keys)
 }
 
-function message(socket, message, color){
-	var messageObj = {
-		data: "" + message,
-		color: color
-	};
-	socket.emit('message',JSON.stringify(messageObj));
+function createGame(type){
+	console.log(type)
+	let connectorSocket={}
+	let newgame=''
+	getGames()
+	//TODO
+	
+	if(type in avalibleGames){
+		console.log('valid game')
+		room+=1
+		//socket.userData.myIDinGame=socket.id
+		//new forked
+		let port=nextPort()
+		console.log(port,'is passed port')
+		let forked = fork(avalibleGames[type].serverPath,[port],{cwd:'games/'+type+'/'});
+		//forked.send({ID:socket.userData.myIDinGame,command:'addPlayer'})
+		forked.room=type+room
+		//forked.connectorSocket=avalibleGames[type].connectorSocket
+		forked.disconnectedPlayers=[]
+		forked.on('message', (msg) => {
+			console.log('msg',msg)
+		});
+		forked.on('exit', function(code) {
+			console.log(`About to exit ${forked.room} with code ${code}`);
+			//forked.connectorSocket.in(forked.room).emit('forward to room','/')
+			delete allforked[forked.room]
+			activeGames=[]
+			for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
+		});
+		let forkedURL='/'+forked.room+'/'
+		//pathRewrites[forkedURL]=''
+		options['.*'+forkedURL]='http://localhost:'+port
+		forked.URL=forkedURL
+		forked.port=port
+		//socket.emit('forward to room',forkedURL)
+		
+		//load game files
+
+		allforked[forked.room]=forked
+		activeGames=[]
+		for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
+		return forkedURL
+	}
 }
-function connectionFunction(socket){
-	//join room
-	socket.userData={}
-	let roomname=socket.conn.request._query.ID
-	console.log(__line, "Connection with client " + socket.id +" established in room: "+roomname);
-	socket.join(roomname)
-	socket.emit('getOldID',(data)=>{
-		console.log('this is data ',data)
-		let gameID=IDs.socketsIDs[data.ID]
-		//console.log('current IDs ',IDs)
-		//console.log('gameID',gameID)
-		//console.log('allforked',allforked)
-		if(gameID!=undefined){
-			console.log('not undefined gameID',gameID)
-			IDs.updateID(data.ID,socket.id)
-			console.log('current clients ',allClients)
-			socket.userData=allClients[gameID]
-			//console.log('this socket userData ',socket.userData)
-			socket.userData.childProcessName=roomname
-			socket.userData.userName=data.name
-			allClients[socket.userData.myIDinGame].childProcessName=roomname
-			allClients[socket.userData.myIDinGame].userName=data.name
-			console.log('this socket userData ',socket.userData)
-			if(allforked[socket.userData.childProcessName]!=undefined){
-				let disconnectedIndex=allforked[socket.userData.childProcessName].disconnectedPlayers.indexOf(socket.userData.myIDinGame)
-				if(disconnectedIndex!=-1){
-					allforked[socket.userData.childProcessName].disconnectedPlayers.splice(disconnectedIndex,1)
-				}
-				socket.on('gameCommands',(message2server)=>{
-					if(allforked[socket.userData.childProcessName]!=undefined){
-						console.log('sending comand to ',socket.userData.childProcessName)
-						message2server.ID=socket.userData.myIDinGame
-						allforked[socket.userData.childProcessName].send(message2server)
-					}else{
-						message( socket, 'room dosenot exist forwarding to lobby', serverColor);
-						socket.emit('forward to room','/')
-						message( socket, 'room dosenot exist forwarding to lobby', serverColor);
-					} 
-				});
-				socket.on("disconnect",function() {
-					console.log(__line,"disconnected: " + socket.userData.userName + ": " + socket.id);
-					if (allforked[socket.userData.childProcessName]!=undefined){
-						let room=socket.userData.childProcessName
-						message( socket.to(room), "" + socket.userData.userName + " has left.", serverColor);
-						message( socket.to(room), "Type 'kick' to kick disconnected players", serverColor);
-						allforked[socket.userData.childProcessName].disconnectedPlayers.push(socket.userData.myIDinGame)
-					}else{socket.emit('forward to room','/')}
-				});
-			}else{socket.emit('forward to room','/')}
-		}else{socket.emit('forward to room','/')}
-	})
-	socket.on('test',()=>{console.log('test')})
-	socket.on("userName", function(userName) {
-		let oldName=socket.userData.userName
-        socket.userData.userName = userName;
-		allClients[socket.userData.myIDinGame].userName=userName
-        console.log(__line,"user changed name: " + socket.userData.userName);
-		message(rageConnect.in(socket.userData.childProcessName), "" + oldName + " has changed name to "+socket.userData.userName, serverColor);
-        if(allforked[socket.userData.childProcessName]!=undefined){
-			let message2server={command:'userName',ID:socket.userData.myIDinGame,data:userName}
-			allforked[socket.userData.childProcessName].send(message2server)
-		}
-		//updateUsers();
-    });
-	socket.on("message",function(data) {
-        /*This event is triggered at the server side when client sends the data using socket.send() method */
-        let room=socket.userData.childProcessName
-		data = JSON.parse(data);
-        console.log(__line, "data: ", data);
-        /*Printing the data */
-		message( socket, "You: " + data.message, chatColor);
-		message( socket.to(room), "" + socket.userData.userName + ": " + data.message, chatColor);
-        if(data.message === "end") {
-            if(allforked[socket.userData.childProcessName]!=undefined){
-				console.log(__line,''+socket.userData.username+" forced end");
-				let message2server={command:'end',ID:socket.userData.myIDinGame}
-				allforked[socket.userData.childProcessName].send(message2server)
-			}
-        } else if(data.message.toLowerCase() === "kick"){
-			console.log(__line, "clearing players");
-			if(allforked[socket.userData.childProcessName]!=undefined){
-				for(player of allforked[socket.userData.childProcessName].disconnectedPlayers){
-					console.log(__line,"removing "+allClients[player].userName+' ID of: '+player);
-					let message2server={command:'removePlayer',ID:player}
-					allforked[socket.userData.childProcessName].send(message2server)
-					message( socket.to(room), "" + socket.userData.userName + " has been removed.", serverColor);
-				}
-			}
-		}
-        /*Sending the Acknowledgement back to the client , this will trigger "message" event on the clients side*/
-    });
-}
-app.use('/',express.static('./Lobby'))
-//app.use('/test',express.static('./testConnection'))
-
-
-
-
-//const second = fork('child.js');
-/*for(i=0;i<2;i++){
-	let forked = fork('child.js');
-	forked.on('message', (msg) => {
-		console.log('Message from child:', msg);
-	});
-	allforked.push(forked)
-}
-console.log(allforked)
-*/
-//allforked[0].send({ port: 'world1' });
-//allforked[1].send({ port: 'world2' });
-//second.send({ port: 'rage' });
-
-
 
 //captures stack? to find and return line number
 Object.defineProperty(global, '__stack', {
