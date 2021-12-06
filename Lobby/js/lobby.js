@@ -6,6 +6,12 @@ function fetchlobbies(){
 		}).then((data)=>{
 			loadgames(data)
 		})
+	fetch('/avalibleGames')
+		.then((response)=>{
+			return response.json()
+		}).then((data)=>{
+			getgames(data)
+		})
 	}
 var dummyID=0
 function loadgames(currentGames){
@@ -25,6 +31,19 @@ function loadgames(currentGames){
 		}
 	}
 }
+
+function getgames(data){
+		//let ul = document.getElementById("ulMessages");
+	$("#new_game").empty();
+	$("#new_game").append('<option value="Cancel">Cancel</option>')
+	for(let i = 0;i<data.length; i++){
+		let game = data[i];
+		//let gameInfo = game.split(':')
+		let appendString="<option value="+game+">"+game+"</option>"
+		$("#new_game").append(appendString)
+	}
+}	
+
 function createNewGame(type){
 	if(type!='Cancel'){
 		socket.emit('newgame',type)

@@ -1,16 +1,14 @@
 const { fork } = require('child_process');
 //const express = require('express');
-const http = require('http');
+//const http = require('http');
 var io = require('socket.io');
 var express = require('express'); // for serving webpages
 const fs = require('fs');// for geting file system
 //var conDB=require('./mysqlConfig/databaseLogin.js')
 var app = express();
 var uid =require( 'uid').uid;
-console.log(uid)
 var port=8081
 
-var server = http.createServer(app).listen(port,"0.0.0.0",511,function(){console.log(__line,"Server connected to socket: "+port);});//Server listens on the port 8124
 console.log('server started')
 io = io.listen(server);
 
@@ -156,8 +154,8 @@ io.sockets.on("connection", function(socket) {
 			//new forked
 			let forked = fork('game/'+avalibleGames[type].serverPath);
 			//forked.send({ID:socket.userData.myIDinGame,command:'addPlayer'})
-			forked.room=''+newgame.split('Server')[0]+room
-			forked.connectorSocket=avalibleGames[type].connectorSocket
+			forked.room=type+room
+			//forked.connectorSocket=avalibleGames[type].connectorSocket
 			forked.disconnectedPlayers=[]
 			forked.on('message', (msg) => {
 				let playerID=msg.playerID
@@ -191,7 +189,7 @@ io.sockets.on("connection", function(socket) {
 				activeGames=[]
 				for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
 			});
-			let forkedURL=`/${newgame.split('Server')[0]}Connect?ID=${forked.room}`
+			let forkedURL='/'+forked.room
 			forked.URL=forkedURL
 			socket.emit('forward to room',forkedURL)
 			
@@ -238,7 +236,7 @@ function getGames(){
 			}
 		}catch(err){
 			console.log('did not succesfuly import ',file)
-			console.log(file,' err ',err)
+			//console.log(file,' err ',err)
 		}
 	});
 	console.log(avalibleGames)
