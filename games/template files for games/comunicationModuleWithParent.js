@@ -1,48 +1,6 @@
-var mode
-try{
-	process.send({playerID:'first comunication'})
-	mode="withParent"
-}
-catch(err){
-	mode="standAlone"
-}
-/*proxy port stuff 
-	internalport=process.argv[2]
-	console.log(process.argv)
-	console.log(internalport)
-function getproxyport(defaultport){
-	console.log(internalport)
-	if (internalport==undefined){
-		return defaultport
-	}else{
-		return internalport
-	}
-}
-*/
-var uid =require( 'uid').uid;
-var IDs={
-	socketsIDs:{},
-	gameIDs:{},
-	novelCount:0,
-	addID(socketsID){
-		let gameID=uid()+this.novelCount++
-		IDs.socketsIDs[socketsID]=gameID
-		IDs.gameIDs[gameID]=socketsID
-		return gameID
-	},
-	updateID(oldID,newID){
-		let gameID=IDs.socketsIDs[oldID]
-		IDs.gameIDs[gameID]=newID
-		IDs.socketsIDs[newID]=gameID
-		delete IDs.socketsIDs[oldID]
-	},
-	removeID(gameID){
-		delete IDs.socketsIDs[IDs.gameIDs[gameID]]
-		delete IDs.gameIDs[gameID]
-	}
-}
 
-var withoutParent={
+
+var withParent={
 	socketList:{},
 	moduleColor:'#aaaaaa',
 	savedcommands:[],
@@ -58,73 +16,55 @@ var withoutParent={
 			console.log("it gave a "+err.name)
 			console.log("with a message of "+err.message)
 		}
-	}
-}
-
-withoutParent.message=function(socket,data){
-	socket.emit("message",{data:data,color:withoutParent.moduleColor})
-}
-
-withoutParent.struct={
-	sockets:{
-		emit:function(command,data){
-			withoutParent.io.sockets.emit("gameCommands",{command:command,data:data})
-		},
-		on:function(command,funct){
-			withoutParent.struct[command]=funct
+	},
+	message:function(socket,data){
+		process.send({playerID:socket.id,data:data})
+	},
+	struct:{
+		sockets:{
+			id:"all",
+			emit:function(command,data){
+				process.send({playerID:"all",command:command,data:data})
+			},
+			on:function(command,funct){
+				withParent.struct[command]=funct
+			}
 		}
 	}
 }
 
-withoutParent.defaultSocket=function(gameID){
+withParent.defaultSocket=function(gameID){
 	return{
 		id:gameID,
 		on: function(command,costomFunction){
-			let player=withoutParent.struct.sockets[gameID]
+			let player=withParent.struct.sockets[gameID]
 			player[command]=costomFunction
 			if(arguments.length!=2){
 				console.log("currently you must have 2 arguments, the call and the function")
 			}
 		},
 		emit:function(command,data){
-			let socket=withoutParent.socketList[gameID]
-			console.log('server sends out to player '+gameID+'at socket ',socket.id,': ',{command:command,data:data})
-			socket.emit("gameCommands",{command:command,data:data})
+			console.log('server sends out to player '+gameID+': ',{command:command,data:data})
+			process.send({playerID:gameID,command:command,data:data})
 		},
 		broadcast:{
 			emit:function(command,data){
-				let socket=withoutParent.socketList[gameID]
-				console.log('server broadcasts to player '+gameID+'at socket ',socket.id,': ',{command:command,data:data})
-				socket.broadcast.emit("gameCommands",{command:command,data:data})
+				console.log('server broadcasts to player '+gameID+': ',{command:command,data:data})
+				process.send({playerID:broadcast,from:gameID,command:command,data:data})
 			}
 		}
 	}
 }
-	
-withoutParent.createServer= function(serverConfgObject){
-	withoutParent.express = require("express");
-	withoutParent.http = require("http");
-	withoutParent.io = require("socket.io")
-	
-	withoutParent.app = withoutParent.express();
+
+withParent.createServer= function(serverConfgObject){
 	withoutParent.app.use(withoutParent.express.static("../template files for games/clientComms")); //working directory
 	//Specifying the public folder of the server to make the html accesible using the static middleware
 	
-	withoutParent.port = serverConfgObject.standAlonePort;
-	//var server = http.createServer(app).listen(8080); //Server listens on the port 8124
-	withoutParent.server = withoutParent.http.createServer(withoutParent.app).listen(withoutParent.port,"0.0.0.0",511,function(){console.log("Server connected to socket: "+withoutParent.port);});//Server listens on the port 8124
-	withoutParent.io = withoutParent.io.listen(withoutParent.server);
+	
 	/*initializing the websockets communication , server instance has to be sent as the argument */
 	withoutParent.io.sockets.on("connection", function(socket) {
 		console.log(__line, "Connection with client " );
-		socket.userData={}
-		let gameID=IDs.addID(socket.id)
-		socket.userData={myIDinGame:gameID}
-		//console.log(socket.userData)
-		withoutParent.socketList[gameID]=socket
-		withoutParent.struct.sockets[gameID]=withoutParent.defaultSocket(gameID)
-		withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
-		/*socket.emit('getOldID',function(data){
+		socket.emit('getOldID',function(data){
 			socket.userData={}
 			//console.log('this is data ',data)
 			let gameID=IDs.socketsIDs[data.ID]
@@ -164,15 +104,6 @@ withoutParent.createServer= function(serverConfgObject){
 			for(input of withoutParent.savedcommands){
 				withoutParent.runGameCommand(input.socket,input.comm)
 			}
-		})*/
-		socket.on("getGameID",(data,callback)=>{
-			if(serverConfgObject.keepsockets){
-				if(withoutParent.struct.sockets[data.ID]!=undefined){
-					withoutParent.struct.sockets[gameID]=withoutParent.struct.sockets[data.ID]
-					delete withoutParent.struct.sockets[data.ID]
-				}
-			}
-			callback(gameID)
 		})
 		socket.on("disconnect",function() {
 			//withoutParent.message( withoutParent.io.sockets, "" + socket.userData.userName + " has left.");
@@ -204,27 +135,4 @@ withoutParent.createServer= function(serverConfgObject){
 		
 	})
 	return withoutParent.struct
-}
-	
-withoutParent.clientfiles=function(){
-	let tapp={use:function(expressPath){
-			if(typeof expressPath =='string'){
-				withoutParent.app.use(withoutParent.express.static(expressPath))
-			}else{
-				console.log("can not process this type of input using this module")
-			}
-		}
-	}
-	return tapp
-}
-
-//withoutParent.proxyport=getproxyport
-
-
-
-
-if(mode=="withParent"){
-	module.exports={proxyport:getproxyport}
-}else{
-	module.exports=withoutParent
 }

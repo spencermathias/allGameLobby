@@ -1,6 +1,6 @@
 const { fork } = require('child_process');
 //const express = require('express');
-//const http = require('http');
+const http = require('http');
 var io = require('socket.io');
 var express = require('express'); // for serving webpages
 const fs = require('fs');// for geting file system
@@ -8,7 +8,7 @@ const fs = require('fs');// for geting file system
 var app = express();
 var uid =require( 'uid').uid;
 var port=8081
-
+var server = http.createServer(app).listen(port,"0.0.0.0",511,function(){console.log(__line,"Server connected to socket: "+port);});//Server listens on the port 8124
 console.log('server started')
 io = io.listen(server);
 
@@ -106,7 +106,7 @@ io.sockets.on("connection", function(socket) {
 
     socket.on("disconnect",function() {
 		message( io.sockets, "" + socket.userData.userName + " has left.", serverColor);
-		message( io.sockets, "Type 'kick' to kick disconnected players", serverColor);
+		//message( io.sockets, "Type 'kick' to kick disconnected players", serverColor);
         console.log(__line,"disconnected: " + socket.userData.userName + ": " + socket.id);
         //let i = allClients.indexOf(socket);
         //if(i >= 0){ allClients.splice(i, 1); }
@@ -215,6 +215,7 @@ function getGames(){
 			}else{
 				name=temp.name
 			}
+			let namespace='/'+name+'Connect'
 			if(avalibleGames[name]==undefined || !avalibleGames[name].folderExposed){
 				avalibleGames[name]=temp
 				app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
@@ -222,6 +223,7 @@ function getGames(){
 				if(avalibleGames[name].connect==undefined){
 					let namespace='/'+name+'Connect'
 					avalibleGames[name].connect=io.of(namespace+'/').on('connection',connectionFunction)
+					
 				}
 			}else{
 				let currentGame=avalibleGames[name]

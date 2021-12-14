@@ -20,6 +20,10 @@ function comms(address){
 		console.log("Connection successful!")
 		tcomms.savedcommands=[]
 		tcomms.functlist.connect()
+		tcomms.io.emit('getGameID',{ID:localStorage.commsID},function(gameID){
+			tcomms.id=gameID
+			localStorage.commsID=gameID
+		})
 	});
 	tcomms.io.on('getOldID',(callBack)=>{
 		if(localStorage.commsID !== undefined){
@@ -27,6 +31,8 @@ function comms(address){
 			callBack({ID:localStorage.commsID,name:localStorage.userName})
 		}
 		localStorage.commsID = thisSocket.id;
+		tcomms.id=gameID
+		tcomms.ready=true
 		tcomms.io.emit('gameID',function(data){
 			console.log('recieved',data)
 			tcomms.id=data.gameID
