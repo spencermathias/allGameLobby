@@ -9,11 +9,9 @@ try{
 catch(err){
 	mode="standAlone"
 }
-if(mode=="withParent"){
-	
-}else{
-	
-}
+
+withParent=require('./comunicationModuleWithParent')
+
 function getproxyport(defaultport){
 	console.log(internalport)
 	if (internalport==undefined){
@@ -24,27 +22,9 @@ function getproxyport(defaultport){
 }
 
 var uid =require( 'uid').uid;
-var IDs={
-	socketsIDs:{},
-	gameIDs:{},
-	novelCount:0,
-	addID(socketsID){
-		let gameID=uid()+this.novelCount++
-		IDs.socketsIDs[socketsID]=gameID
-		IDs.gameIDs[gameID]=socketsID
-		return gameID
-	},
-	updateID(oldID,newID){
-		let gameID=IDs.socketsIDs[oldID]
-		IDs.gameIDs[gameID]=newID
-		IDs.socketsIDs[newID]=gameID
-		delete IDs.socketsIDs[oldID]
-	},
-	removeID(gameID){
-		delete IDs.socketsIDs[IDs.gameIDs[gameID]]
-		delete IDs.gameIDs[gameID]
-	}
-}
+var IDs={}
+var allClients=[]
+novelCount=0
 
 var withoutParent={
 	socketList:{},
@@ -112,58 +92,36 @@ withoutParent.createServer= function(serverConfgObject){
 	//Specifying the public folder of the server to make the html accesible using the static middleware
 	
 	withoutParent.port = serverConfgObject.standAlonePort;
-	//var server = http.createServer(app).listen(8080); //Server listens on the port 8124
 	withoutParent.server = withoutParent.http.createServer(withoutParent.app).listen(withoutParent.port,"0.0.0.0",511,function(){console.log("Server connected to socket: "+withoutParent.port);});//Server listens on the port 8124
 	withoutParent.io = withoutParent.io.listen(withoutParent.server);
 	/*initializing the websockets communication , server instance has to be sent as the argument */
 	withoutParent.io.sockets.on("connection", function(socket) {
 		console.log(__line, "Connection with client " );
-		socket.emit('getOldID',function(data){
-			socket.userData={}
-			//console.log('this is data ',data)
-			let gameID=IDs.socketsIDs[data.ID]
-			//console.log('current IDs ',IDs)
-			//console.log('prior gameID',gameID)
-			if((!serverConfgObject.keepsockets||serverConfgObject.keepsockets==undefined)&&(gameID!=undefined)){
-				IDs.removeID(gameID)
-				delete withoutParent.socketList[gameID]
-				//console.log('removed id:',gameID)
-				gameID=undefined
-			}
-			
-			if(gameID!=undefined){
-				console.log('not undefined gameID',gameID)
-				IDs.updateID(data.ID,socket.id)
-				socket.userData={myIDinGame:gameID}
-				withoutParent.socketList[gameID]=socket
-				withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
-			}else{
-				gameID=IDs.addID(socket.id)
-				socket.userData={myIDinGame:gameID}
-				//console.log(socket.userData)
-				withoutParent.socketList[gameID]=socket
-				withoutParent.struct.sockets[gameID]=withoutParent.defaultSocket(gameID)
-				withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
-			}
-			//console.log('post gameID',gameID)
-			
+		let gameID=uid()+novelCount++
+		IDs[gameID]=gameID
 		
-			withoutParent.message(socket, "Connection established!")
-
-			console.log(__line, "Socket.io Connection with client " + socket.id +" established");
-			socket.on('gameID',(callback)=>{
-				//console.log('sending gameID:',gameID)
-				callback({gameID:gameID})
-			})
-			for(input of withoutParent.savedcommands){
-				withoutParent.runGameCommand(input.socket,input.comm)
+		socket.on('sendUsername', function (data, callback) {
+			console.log('Socket (server-side): received message:', data);
+			if(serverConfgObject.keepsockets ){
+				if(IDs[data.ID]){
+					IDs[gameID]=IDs[data.ID]
+					delete IDs[data.ID]
+				}
 			}
-		})
+			gameID=IDs[gameID]
+			var responseData = gameID
+			socket.userData={myIDinGame:gameID}
+			if(withoutParent.socketList[gameID]==undefined){
+				console.log(socket.userData)
+				withoutParent.struct.sockets[gameID]=withoutParent.defaultSocket(gameID)
+			}
+			withoutParent.socketList[gameID]=socket
+			console.log(withoutParent.struct.sockets[gameID])
+			withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
+			callback(responseData);
+		});
+		
 		socket.on("disconnect",function() {
-			//withoutParent.message( withoutParent.io.sockets, "" + socket.userData.userName + " has left.");
-			//withoutParent.message( withoutParent.io.sockets, "Type 'kick' to kick disconnected players");
-			//console.log("disconnected: " + socket.userData.myIDinGame + ": " + socket.id);
-			//players are only removed if kicked
 			console.log(socket)
 			console.log('active game sockets',withoutParent.struct.sockets)
 			console.log('socketList',withoutParent.socketList)
@@ -205,7 +163,7 @@ withoutParent.clientfiles=function(){
 withoutParent.proxyport=getproxyport
 
 if(mode=="withParent"){
-	module.exports={proxyport:getproxyport}
+	module.exports=withParent
 }else{
 	module.exports=withoutParent
 }
