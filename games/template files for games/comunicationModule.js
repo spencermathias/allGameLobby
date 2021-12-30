@@ -1,15 +1,19 @@
 var mode
 try{
+	internalport=process.argv[2]
+	console.log(process.argv)
+	console.log(internalport)
 	process.send({playerID:'first comunication'})
 	mode="withParent"
 }
 catch(err){
 	mode="standAlone"
 }
-/*proxy port stuff 
-	internalport=process.argv[2]
-	console.log(process.argv)
-	console.log(internalport)
+if(mode=="withParent"){
+	
+}else{
+	
+}
 function getproxyport(defaultport){
 	console.log(internalport)
 	if (internalport==undefined){
@@ -18,7 +22,7 @@ function getproxyport(defaultport){
 		return internalport
 	}
 }
-*/
+
 var uid =require( 'uid').uid;
 var IDs={
 	socketsIDs:{},
@@ -60,11 +64,9 @@ var withoutParent={
 		}
 	}
 }
-
 withoutParent.message=function(socket,data){
 	socket.emit("message",{data:data,color:withoutParent.moduleColor})
 }
-
 withoutParent.struct={
 	sockets:{
 		emit:function(command,data){
@@ -75,7 +77,6 @@ withoutParent.struct={
 		}
 	}
 }
-
 withoutParent.defaultSocket=function(gameID){
 	return{
 		id:gameID,
@@ -117,14 +118,7 @@ withoutParent.createServer= function(serverConfgObject){
 	/*initializing the websockets communication , server instance has to be sent as the argument */
 	withoutParent.io.sockets.on("connection", function(socket) {
 		console.log(__line, "Connection with client " );
-		socket.userData={}
-		let gameID=IDs.addID(socket.id)
-		socket.userData={myIDinGame:gameID}
-		//console.log(socket.userData)
-		withoutParent.socketList[gameID]=socket
-		withoutParent.struct.sockets[gameID]=withoutParent.defaultSocket(gameID)
-		withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
-		/*socket.emit('getOldID',function(data){
+		socket.emit('getOldID',function(data){
 			socket.userData={}
 			//console.log('this is data ',data)
 			let gameID=IDs.socketsIDs[data.ID]
@@ -164,15 +158,6 @@ withoutParent.createServer= function(serverConfgObject){
 			for(input of withoutParent.savedcommands){
 				withoutParent.runGameCommand(input.socket,input.comm)
 			}
-		})*/
-		socket.on("getGameID",(data,callback)=>{
-			if(serverConfgObject.keepsockets){
-				if(withoutParent.struct.sockets[data.ID]!=undefined){
-					withoutParent.struct.sockets[gameID]=withoutParent.struct.sockets[data.ID]
-					delete withoutParent.struct.sockets[data.ID]
-				}
-			}
-			callback(gameID)
 		})
 		socket.on("disconnect",function() {
 			//withoutParent.message( withoutParent.io.sockets, "" + socket.userData.userName + " has left.");
@@ -217,11 +202,7 @@ withoutParent.clientfiles=function(){
 	}
 	return tapp
 }
-
-//withoutParent.proxyport=getproxyport
-
-
-
+withoutParent.proxyport=getproxyport
 
 if(mode=="withParent"){
 	module.exports={proxyport:getproxyport}
