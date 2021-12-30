@@ -23,6 +23,7 @@ function comms(address){
 				ID:localStorage.commsID,
 				name:localStorage.userName
 			}, function (responseData) {
+			//tcomms.ready=true
 			console.log('Callback called with data:', responseData);
 			if(responseData=='return'){
 				window.location.href='/'

@@ -31,6 +31,7 @@ function loadgames(currentGames){
 }
 
 function getgames(data){
+
 	$("#new_game").empty();
 	$("#new_game").append('<option value="Cancel">Cancel</option>')
 	for(let i = 0;i<data.length; i++){
@@ -46,14 +47,8 @@ function createNewGame(type){
 	}
 }
 function send2game(game){
-	//TODO check if game is still ready not started-----------------/
-	//console.log('send player to a '+type+' game')
-	if(game=='cribbage1'){
-		location.href = "/cribbage1"
-	}else{
-		console.log('send player to: '+game)
-		location.href = game
-	}
+	console.log('send player to: '+game)
+	location.href = game
 }
 function createServer(type){
 	dummyID++
@@ -89,19 +84,15 @@ socket.on('reconnect', function(attempt){
 
 socket.on('connect', function(){
 	//get userName
+	console.log("Connection successful!");
 	socket.emit('sendUsername', {
-			ID:localStorage.commsID,
+			ID:localStorage.ID,
 			name:localStorage.userName
 		}, function (responseData) {
 		console.log('Callback called with data:', responseData);
-		if(responseData=='return'){
-			window.location.href='/'
-		}else{
-			localStorage.commsID=responseData
-		}
+		localStorage.ID=responseData
+		id=responseData
 	});
-	console.log("Connection successful!");
-
 });
 
 
