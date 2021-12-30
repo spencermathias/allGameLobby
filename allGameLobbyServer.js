@@ -1,6 +1,5 @@
 const { fork } = require('child_process');
-//const express = require('express');
-//const http = require('http');
+const http = require('http');
 var io = require('socket.io');
 var express = require('express'); // for serving webpages
 const fs = require('fs');// for geting file system
@@ -9,28 +8,16 @@ var app = express();
 var uid =require( 'uid').uid;
 var port=8081
 
+var server = http.createServer(app).listen(port,"0.0.0.0",511,function(){console.log(__line,"Server connected to socket: "+port);});//Server listens on the port 8124
 console.log('server started')
 io = io.listen(server);
 
 app.use(express.static('./IPconfiguration'))
 app.use(express.static('./gameHelperFunctions'))
 var novelCount=0
-var IDs={
-	socketsIDs:{},
-	gameIDs:{},
-	addID(socketsID){
-		let gameID=uid()+novelCount++
-		this.socketsIDs[socketsID]=gameID
-		this.gameIDs[gameID]=socketsID
-		return gameID
-	},
-	updateID(oldID,newID){
-		let gameID=IDs.socketsIDs[oldID]
-		IDs.gameIDs[gameID]=newID
-		IDs.socketsIDs[newID]=gameID
-		delete IDs.socketsIDs[oldID]
-	}
-}
+var IDs={}
+var socketIDs
+
 var allClients={}
 var gameStatus=1
 var serverColor='#000000'
@@ -79,27 +66,23 @@ app.use('/avalibleGames',  function (req, res){
 //connections to lobby
 io.sockets.on("connection", function(socket) {
 	socket.userData={}
-	//let roomname=socket.conn.request._query.ID
 	console.log(__line, "lobby Connection with client " + socket.id +" established in room: lobby");
-	//socket.join(roomname)
-	socket.emit('getOldID',(data)=>{
-		console.log('this is data ',data)
-		let gameID=IDs.socketsIDs[data.ID]
-		console.log('current IDs ',IDs)
-		console.log('gameID',gameID)
-		//console.log('allforked',allforked)
-		if(gameID!=undefined){
-			console.log('not undefined gameID',gameID)
-			IDs.updateID(data.ID,socket.id)
-			socket.userData=allClients[gameID]
-			allClients[socket.userData.myIDinGame].childProcessName='inMainLobby'
-		}else{
-			gameID=IDs.addID(socket.id)
-			allClients[gameID]=defaultUserData(gameID)
-			allClients[gameID].userName=data.name
-		}
-	})
 	
+	socket.on('sendUsername', function (data, callback) {
+		console.log('Socket (server-side): received message:', data);
+		let gameID=uid()+novelCount++
+		IDs[gameID]=gameID
+		if(IDs[data.ID]){
+			IDs[gameID]=IDs[data.ID]
+			delete IDs[data.ID]
+		}
+		var responseData = IDs[gameID]
+		socket.userData={myIDinGame:IDs[gameID]}
+		
+		console.log('connection data:', );
+		
+		callback(responseData);
+	});
 	message(socket, "Connection established!", serverColor)
 
     console.log(__line, "Socket.io Connection with client " + socket.id +" established");
@@ -108,16 +91,6 @@ io.sockets.on("connection", function(socket) {
 		message( io.sockets, "" + socket.userData.userName + " has left.", serverColor);
 		message( io.sockets, "Type 'kick' to kick disconnected players", serverColor);
         console.log(__line,"disconnected: " + socket.userData.userName + ": " + socket.id);
-        //let i = allClients.indexOf(socket);
-        //if(i >= 0){ allClients.splice(i, 1); }
-		//i = spectators.indexOf(socket);
-        //if(i >= 0){ spectators.splice(i, 1); }
-        // if(gameStatus!=gameMode.LOBBY){
-        // 	let i = players.indexOf(socket)
-        // 	if(i >= 0){players.disconnected=true}
-        // }
-		//updateUsers();
-        //players are only removed if kicked
     });
 	
 
@@ -132,17 +105,9 @@ io.sockets.on("connection", function(socket) {
         /*Sending the Acknowledgement back to the client , this will trigger "message" event on the clients side*/
     });
 
-    // socket.on("userName", function(userName) {
-        // allClients[socket.userData.myIDinGame].userName=userName
-		// socket.userData.userName = userName;
-        // console.log(__line,"user changed name " + socket.userData.userName);
-		// message(io.sockets, "" + socket.userData.userName + " has changed name", serverColor);
-        // //updateUsers();
-    // });
 
     socket.on('newgame',(type)=>{
 		console.log(type)
-		let connectorSocket={}
 		let newgame=''
 		getGames()
 		//TODO
@@ -152,34 +117,46 @@ io.sockets.on("connection", function(socket) {
 			room+=1
 			//socket.userData.myIDinGame=socket.id
 			//new forked
-			let forked = fork('game/'+avalibleGames[type].serverPath);
+			let forked = fork(avalibleGames[type].dirName+avalibleGames[type].serverPath,[],{execArgv:['--inspect=7000']});
 			//forked.send({ID:socket.userData.myIDinGame,command:'addPlayer'})
 			forked.room=type+room
-			//forked.connectorSocket=avalibleGames[type].connectorSocket
+			
+			forked.connectorSocket=avalibleGames[type].connect
+			
 			forked.disconnectedPlayers=[]
-			forked.on('message', (msg) => {
+			let namespace='/'+type+'Connect'
+			forked.on('message', (msg)=>{
 				let playerID=msg.playerID
 				let command=msg.command
 				let data=msg.data
-				if(playerID=='all'){
+				if(playerID=="first comunication"){
+					console.log("connected to "+forked.room)
+				}else if(playerID=='all'){
 					console.log(__line,'child to all:');
-					if(command=='userList'){
-						for(user of data){
-							if(user.ID!=undefined){
-								user.userName=allClients[user.ID].userName
-								user.ID=IDs.gameIDs[user.ID]
-								console.log(__line,user)
-							}else{user.id=IDs.gameIDs[user.id]}
-						}
-					}
 					console.log('msg',msg)
 					console.log('room',forked.room)
-					forked.connectorSocket.in(forked.room).emit(command,data)
+					forked.connectorSocket.in(forked.room).emit('gameCommands',{command:command,data:data})
+				}else if(playerID=='use'){
+					let path=msg.path
+					if(path.charAt(0)=='.'&&path.charAt(1)=='.'){
+						fullpath="./games"+path.substr(2)
+						console.log(fullpath)
+						app.use(namespace,express.static(fullpath))
+					}else if(path.charAt(0)=='.'){
+						fullpath=avalibleGames[type].dirName.substr(0,avalibleGames[type].dirName.length-1)+path.substr(1)
+						console.log(fullpath)
+						app.use(namespace,express.static(fullpath))
+					}else{
+						console.log(avalibleGames[type].dirName+msg.path)
+						app.use(namespace,express.static(avalibleGames[type].dirName+msg.path))
+					}
+				}else if(playerID.from!=undefined){
+					allClients[playerID.from].broadcast.emit('gameCommands',{command:command,data:data})
 				}else{
 					//debugger
 					console.log(__line,'child to '+playerID)
 					console.log(msg)
-					forked.connectorSocket.to(IDs.gameIDs[playerID]).emit(command,data)
+					allClients[playerID].emit('gameCommands',{command:command,data:data})
 				}
 			});
 			forked.on('exit', function(code) {
@@ -189,8 +166,9 @@ io.sockets.on("connection", function(socket) {
 				activeGames=[]
 				for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
 			});
-			let forkedURL='/'+forked.room
+			let forkedURL='/'+type+'Connect/'+'?ID='+forked.room
 			forked.URL=forkedURL
+			forked.type=type
 			socket.emit('forward to room',forkedURL)
 			
 			//load game files
@@ -203,13 +181,16 @@ io.sockets.on("connection", function(socket) {
     socket.on('test',()=>{console.log('tested parent')});
     //socket.on('pass2game',(name,gamecomand)=>{})
 });
+
+
+
 function getGames(){
 	const testFolder = './games/';
 	fs.readdirSync(testFolder).forEach(file => {
 		try{
 			let temp=require('./games/'+file+'/serverconfig.js')
 			let name=''
-			temp.dirName='./games/'+file
+			temp.dirName='./games/'+file+'/'
 			if(temp.name==undefined){
 				name=file
 			}else{
@@ -217,7 +198,7 @@ function getGames(){
 			}
 			if(avalibleGames[name]==undefined || !avalibleGames[name].folderExposed){
 				avalibleGames[name]=temp
-				app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+				//app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
 				folderExposed=true
 				if(avalibleGames[name].connect==undefined){
 					let namespace='/'+name+'Connect'
@@ -236,7 +217,7 @@ function getGames(){
 			}
 		}catch(err){
 			console.log('did not succesfuly import ',file)
-			//console.log(file,' err ',err)
+			console.log(file,' err ',err)
 		}
 	});
 	console.log(avalibleGames)
@@ -251,95 +232,68 @@ function message(socket, message, color){
 }
 function connectionFunction(socket){
 	//join room
-	socket.userData={}
+	//socket.userData={}
+	let gameID=uid()+novelCount++
+	IDs[gameID]=gameID
 	let roomname=socket.conn.request._query.ID
 	console.log(__line, "Connection with client " + socket.id +" established in room: "+roomname);
 	socket.join(roomname)
-	socket.emit('getOldID',(data)=>{
-		console.log('this is data ',data)
-		let gameID=IDs.socketsIDs[data.ID]
-		//console.log('current IDs ',IDs)
-		//console.log('gameID',gameID)
-		//console.log('allforked',allforked)
-		if(gameID!=undefined){
-			console.log('not undefined gameID',gameID)
-			IDs.updateID(data.ID,socket.id)
-			console.log('current clients ',allClients)
-			socket.userData=allClients[gameID]
-			//console.log('this socket userData ',socket.userData)
-			socket.userData.childProcessName=roomname
-			socket.userData.userName=data.name
-			allClients[socket.userData.myIDinGame].childProcessName=roomname
-			allClients[socket.userData.myIDinGame].userName=data.name
-			console.log('this socket userData ',socket.userData)
-			if(allforked[socket.userData.childProcessName]!=undefined){
-				let disconnectedIndex=allforked[socket.userData.childProcessName].disconnectedPlayers.indexOf(socket.userData.myIDinGame)
-				if(disconnectedIndex!=-1){
-					allforked[socket.userData.childProcessName].disconnectedPlayers.splice(disconnectedIndex,1)
-				}
-				socket.on('gameCommands',(message2server)=>{
-					if(allforked[socket.userData.childProcessName]!=undefined){
-						console.log('sending comand to ',socket.userData.childProcessName)
-						message2server.ID=socket.userData.myIDinGame
-						allforked[socket.userData.childProcessName].send(message2server)
-					}else{
-						message( socket, 'room dosenot exist forwarding to lobby', serverColor);
-						socket.emit('forward to room','/')
-						message( socket, 'room dosenot exist forwarding to lobby', serverColor);
-					} 
-				});
-				socket.on("disconnect",function() {
-					console.log(__line,"disconnected: " + socket.userData.userName + ": " + socket.id);
-					if (allforked[socket.userData.childProcessName]!=undefined){
-						let room=socket.userData.childProcessName
-						message( socket.to(room), "" + socket.userData.userName + " has left.", serverColor);
-						message( socket.to(room), "Type 'kick' to kick disconnected players", serverColor);
-						allforked[socket.userData.childProcessName].disconnectedPlayers.push(socket.userData.myIDinGame)
-					}else{socket.emit('forward to room','/')}
-				});
-			}else{socket.emit('forward to room','/')}
-		}else{socket.emit('forward to room','/')}
-	})
-	socket.on('test',()=>{console.log('test')})
-	socket.on("userName", function(userName) {
-		let oldName=socket.userData.userName
-        socket.userData.userName = userName;
-		allClients[socket.userData.myIDinGame].userName=userName
-        console.log(__line,"user changed name: " + socket.userData.userName);
-		message(rageConnect.in(socket.userData.childProcessName), "" + oldName + " has changed name to "+socket.userData.userName, serverColor);
-        if(allforked[socket.userData.childProcessName]!=undefined){
-			let message2server={command:'userName',ID:socket.userData.myIDinGame,data:userName}
-			allforked[socket.userData.childProcessName].send(message2server)
-		}
-		//updateUsers();
-    });
-	socket.on("message",function(data) {
-        /*This event is triggered at the server side when client sends the data using socket.send() method */
-        let room=socket.userData.childProcessName
-		data = JSON.parse(data);
-        console.log(__line, "data: ", data);
-        /*Printing the data */
-		message( socket, "You: " + data.message, chatColor);
-		message( socket.to(room), "" + socket.userData.userName + ": " + data.message, chatColor);
-        if(data.message === "end") {
-            if(allforked[socket.userData.childProcessName]!=undefined){
-				console.log(__line,''+socket.userData.username+" forced end");
-				let message2server={command:'end',ID:socket.userData.myIDinGame}
-				allforked[socket.userData.childProcessName].send(message2server)
-			}
-        } else if(data.message.toLowerCase() === "kick"){
-			console.log(__line, "clearing players");
-			if(allforked[socket.userData.childProcessName]!=undefined){
-				for(player of allforked[socket.userData.childProcessName].disconnectedPlayers){
-					console.log(__line,"removing "+allClients[player].userName+' ID of: '+player);
-					let message2server={command:'removePlayer',ID:player}
-					allforked[socket.userData.childProcessName].send(message2server)
-					message( socket.to(room), "" + socket.userData.userName + " has been removed.", serverColor);
+	
+	socket.on('sendUsername', function (data, callback) {
+		if(allforked[roomname]){
+			console.log('Socket (server-side): received message:', data);
+			let type=allforked[roomname].type
+			if(avalibleGames[type].keepsockets ){
+				if(IDs[data.ID]){
+					IDs[gameID]=IDs[data.ID]
+					delete IDs[data.ID]
 				}
 			}
+			//socketIDs[gameID]=socket.id
+			
+			var responseData = IDs[gameID]
+			socket.userData={myIDinGame:IDs[gameID]}
+			let message2server={gameID:IDs[gameID],data:{}}
+			console.log('connection data:', message2server);
+			if(allforked[roomname]!=undefined){
+				allforked[roomname].send(message2server)
+			}else{
+				message( socket, 'room dosenot exist forwarding to lobby', serverColor);
+				socket.emit('forward to room','/')
+			}
+			allClients[IDs[gameID]]=socket
+		}else{
+			responseData='return'
 		}
-        /*Sending the Acknowledgement back to the client , this will trigger "message" event on the clients side*/
-    });
+		callback(responseData);
+	});
+	
+	socket.on('gameCommands',(mes)=>{
+		if(allforked[roomname]!=undefined){
+			let message2server={gameID:IDs[gameID],data:mes}
+			console.log('sending comand to ',roomname,'and ID:',IDs[gameID])
+			//message2server.gameID=IDs[gameID] socket.userData.myIDinGame
+			console.log(message2server)
+			allforked[roomname].send(message2server)
+		}else{
+			message( socket, 'room dosenot exist forwarding to lobby', serverColor);
+			//socket.emit('forward to room','/')
+			console.log( socket.ID, 'room dosenot exist forwarding to lobby',gameID);
+		} 
+	});
+	
+	socket.on("disconnect",function() {
+		console.log(__line,"disconnected: " + gameID + ": " + socket.id);
+		let message2server={gameID:IDs[gameID],data:{command:'disconnect'}}
+		console.log('sending comand to ',roomname,'and ID:',IDs[gameID])
+		console.log(message2server)
+		if(allforked[roomname]){
+			allforked[roomname].send(message2server)
+		}
+		delete allClients[IDs[gameID]]
+	});
+	
+
 }
 app.use('/',express.static('./Lobby'))
 //app.use('/test',express.static('./testConnection'))
@@ -388,7 +342,13 @@ stdin.addListener("data", function(d) {
     // with toString() and then trim() 
 	var input = d.toString().trim();
     console.log('you entered: [' + input + ']');
-	if(input.includes('$') && !input.includes('$$')){
+	if(input.charAt(0)=='#'){
+		let game=avalibleGames[input.substr(1)]
+		if(game){
+			game.folderExposed=false
+			console.log(game+" reloaded")
+		}
+	}else if(input.includes('$') && !input.includes('$$')){
 		sinput=input.split('$')
 		console.log(sinput)
 		if(sinput.length==2){

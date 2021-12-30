@@ -13,44 +13,35 @@ function comms(address){
 			}
 		},
 		send:function(data){tcomms.io.emit('gameCommands',{command:'message',data:data})},
-		functlist:{},
-		ready:false
+		functlist:{}//,
+		
 	};
 	tcomms.io.on('connect', () => {
 		console.log("Connection successful!")
 		tcomms.savedcommands=[]
+		tcomms.io.emit('sendUsername', {
+				ID:localStorage.commsID,
+				name:localStorage.userName
+			}, function (responseData) {
+			//tcomms.ready=true
+			console.log('Callback called with data:', responseData);
+			if(responseData=='return'){
+				window.location.href='/'
+			}else{
+				localStorage.commsID=responseData
+				tcomms.id=responseData
+			}
+		});
 		tcomms.functlist.connect()
 	});
-	tcomms.io.on('getOldID',(callBack)=>{
-		if(localStorage.commsID !== undefined){
-			console.log(localStorage)
-			callBack({ID:localStorage.commsID,name:localStorage.userName})
-		}
-		localStorage.commsID = thisSocket.id;
-		tcomms.io.emit('gameID',function(data){
-			console.log('recieved',data)
-			tcomms.id=data.gameID
-			localStorage.id=data.gameID
-			while(tcomms.savedcommands.length>0){
-				input=tcomms.savedcommands.shift()
-				console.log('saved command',input)
-				tcomms.functlist[input.command](input.data)
-			}
-			tcomms.ready=true
-		})
-		//socket.emit('gameCommands',{command:'addPlayer',data:localStorage.userName});
-	});
+	
 	tcomms.io.on('forward to room',(path)=>{
 		console.log('move to path:',path)
 		window.location.href=path
 	});
 	tcomms.io.on('gameCommands',function(input){
-		if(tcomms.ready){
-			console.log('game command',input)
-			tcomms.functlist[input.command](input.data)
-		}else{
-			tcomms.savedcommands.push(input)
-		}
+		console.log('game command',input)
+		tcomms.functlist[input.command](input.data)
 	});
 	tcomms.io.on('message',(message)=>{
 		console.log(message)
