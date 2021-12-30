@@ -15,14 +15,12 @@ function fetchlobbies(){
 	}
 var dummyID=0
 function loadgames(currentGames){
-	//let ul = document.getElementById("ulMessages");
 	while($("ul")[0].firstChild) $("ul")[0].firstChild.remove();
 	if(currentGames.length==0){
 		$("ul").append("<li> No games are currently avalible.<br> Please create new game using drop down menu above </li>")
 	}else{
 		for(let i = currentGames.length-1;i>=0; i--){
 			let game = currentGames[i];
-			//let gameInfo = game.split(':')
 			let appendString='<li>'+
 								`<div id="title" onclick="send2game('${game.URL}')"> ${game.name}</div>`+
 								'<div id="subtitle">Click to Start</div>'+
@@ -33,12 +31,11 @@ function loadgames(currentGames){
 }
 
 function getgames(data){
-		//let ul = document.getElementById("ulMessages");
+
 	$("#new_game").empty();
 	$("#new_game").append('<option value="Cancel">Cancel</option>')
 	for(let i = 0;i<data.length; i++){
 		let game = data[i];
-		//let gameInfo = game.split(':')
 		let appendString="<option value="+game+">"+game+"</option>"
 		$("#new_game").append(appendString)
 	}
@@ -50,14 +47,8 @@ function createNewGame(type){
 	}
 }
 function send2game(game){
-	//TODO check if game is still ready not started-----------------/
-	//console.log('send player to a '+type+' game')
-	if(game=='cribbage1'){
-		location.href = "/cribbage1"
-	}else{
-		console.log('send player to: '+game)
-		location.href = game
-	}
+	console.log('send player to: '+game)
+	location.href = game
 }
 function createServer(type){
 	dummyID++
@@ -94,11 +85,14 @@ socket.on('reconnect', function(attempt){
 socket.on('connect', function(){
 	//get userName
 	console.log("Connection successful!");
-	/*if(localStorage.userName === undefined){
-		changeName(socket.id);
-	} else {
-		'userName', localStorage.userName;
-	}*/
+	socket.emit('sendUsername', {
+			ID:localStorage.ID,
+			name:localStorage.userName
+		}, function (responseData) {
+		console.log('Callback called with data:', responseData);
+		localStorage.ID=responseData
+		id=responseData
+	});
 });
 
 
