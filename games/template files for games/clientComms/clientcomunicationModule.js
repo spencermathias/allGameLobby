@@ -21,9 +21,10 @@ function comms(address){
 		tcomms.savedcommands=[]
 		tcomms.io.emit('sendUsername', {
 				ID:localStorage.commsID,
-				name:localStorage.userName
+				name:localStorage.userName,
+				command:'onConnect',
+				data:localStorage.userName
 			}, function (responseData) {
-			//tcomms.ready=true
 			console.log('Callback called with data:', responseData);
 			if(responseData=='return'){
 				window.location.href='/'

@@ -129,34 +129,39 @@ io.sockets.on("connection", function(socket) {
 				let playerID=msg.playerID
 				let command=msg.command
 				let data=msg.data
-				if(playerID=="first comunication"){
-					console.log("connected to "+forked.room)
-				}else if(playerID=='all'){
-					console.log(__line,'child to all:');
-					console.log('msg',msg)
-					console.log('room',forked.room)
-					forked.connectorSocket.in(forked.room).emit('gameCommands',{command:command,data:data})
-				}else if(playerID=='use'){
-					let path=msg.path
-					if(path.charAt(0)=='.'&&path.charAt(1)=='.'){
-						fullpath="./games"+path.substr(2)
-						console.log(fullpath)
-						app.use(namespace,express.static(fullpath))
-					}else if(path.charAt(0)=='.'){
-						fullpath=avalibleGames[type].dirName.substr(0,avalibleGames[type].dirName.length-1)+path.substr(1)
-						console.log(fullpath)
-						app.use(namespace,express.static(fullpath))
+				if(playerID!=undefined){
+					if(playerID=="first comunication"){
+						console.log("connected to "+forked.room)
+						socket.emit('forward to room',forkedURL)
+					}else if(playerID=='all'){
+						console.log(__line,'child to all:');
+						console.log('msg',msg)
+						console.log('room',forked.room)
+						forked.connectorSocket.in(forked.room).emit('gameCommands',{command:command,data:data})
+					}else if(playerID=='use'){
+						let path=msg.path
+						if(path.charAt(0)=='.'&&path.charAt(1)=='.'){
+							fullpath="./games"+path.substr(2)
+							console.log(fullpath)
+							app.use(namespace,express.static(fullpath))
+						}else if(path.charAt(0)=='.'){
+							fullpath=avalibleGames[type].dirName.substr(0,avalibleGames[type].dirName.length-1)+path.substr(1)
+							console.log(fullpath)
+							app.use(namespace,express.static(fullpath))
+						}else{
+							console.log(avalibleGames[type].dirName+msg.path)
+							app.use(namespace,express.static(avalibleGames[type].dirName+msg.path))
+						}
+					}else if(playerID.from!=undefined){
+						allClients[playerID.from].broadcast.emit('gameCommands',{command:command,data:data})
+					}else if(allClients[playerID]!=undefined){
+						//debugger
+						console.log(__line,'child to '+playerID)
+						console.log(msg)
+						allClients[playerID].emit('gameCommands',{command:command,data:data})
 					}else{
-						console.log(avalibleGames[type].dirName+msg.path)
-						app.use(namespace,express.static(avalibleGames[type].dirName+msg.path))
+						console.log('could not process message')
 					}
-				}else if(playerID.from!=undefined){
-					allClients[playerID.from].broadcast.emit('gameCommands',{command:command,data:data})
-				}else{
-					//debugger
-					console.log(__line,'child to '+playerID)
-					console.log(msg)
-					allClients[playerID].emit('gameCommands',{command:command,data:data})
 				}
 			});
 			forked.on('exit', function(code) {
@@ -166,10 +171,11 @@ io.sockets.on("connection", function(socket) {
 				activeGames=[]
 				for(game in allforked){activeGames.push({name:game,URL:allforked[game].URL})}
 			});
+				
 			let forkedURL='/'+type+'Connect/'+'?ID='+forked.room
 			forked.URL=forkedURL
 			forked.type=type
-			socket.emit('forward to room',forkedURL)
+			
 			
 			//load game files
 
@@ -196,28 +202,30 @@ function getGames(){
 			}else{
 				name=temp.name
 			}
-			if(avalibleGames[name]==undefined || !avalibleGames[name].folderExposed){
-				avalibleGames[name]=temp
-				//app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
-				folderExposed=true
-				if(avalibleGames[name].connect==undefined){
-					let namespace='/'+name+'Connect'
-					avalibleGames[name].connect=io.of(namespace+'/').on('connection',connectionFunction)
-				}
-			}else{
-				let currentGame=avalibleGames[name]
-				if(currentGame.clientFolder!=temp.clientFolder){
-					app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
-				}
-				for(key of Object.keys(temp)){
-					if(key!="connect"){
-						currentGame[key]=temp[key]
+			if(temp.useWithParent==undefined||temp.useWithParent===true){
+				if(avalibleGames[name]==undefined || !avalibleGames[name].folderExposed){
+					avalibleGames[name]=temp
+					//app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+					folderExposed=true
+					if(avalibleGames[name].connect==undefined){
+						let namespace='/'+name+'Connect'
+						avalibleGames[name].connect=io.of(namespace+'/').on('connection',connectionFunction)
+					}
+				}else{
+					let currentGame=avalibleGames[name]
+					if(currentGame.clientFolder!=temp.clientFolder){
+						app.use(namespace,express.static(avalibleGames[name].dirName+'/'+avalibleGames[name].clientFolder))
+					}
+					for(key of Object.keys(temp)){
+						if(key!="connect"){
+							currentGame[key]=temp[key]
+						}
 					}
 				}
 			}
 		}catch(err){
 			console.log('did not succesfuly import ',file)
-			console.log(file,' err ',err)
+			//console.log(file,' err ',err)
 		}
 	});
 	console.log(avalibleGames)
@@ -243,7 +251,7 @@ function connectionFunction(socket){
 		if(allforked[roomname]){
 			console.log('Socket (server-side): received message:', data);
 			let type=allforked[roomname].type
-			if(avalibleGames[type].keepsockets ){
+			if(avalibleGames[type].keepSockets ){
 				if(IDs[data.ID]){
 					IDs[gameID]=IDs[data.ID]
 					delete IDs[data.ID]
@@ -253,7 +261,7 @@ function connectionFunction(socket){
 			
 			var responseData = IDs[gameID]
 			socket.userData={myIDinGame:IDs[gameID]}
-			let message2server={gameID:IDs[gameID],data:{}}
+			let message2server={gameID:IDs[gameID],data:data}
 			console.log('connection data:', message2server);
 			if(allforked[roomname]!=undefined){
 				allforked[roomname].send(message2server)
@@ -271,6 +279,13 @@ function connectionFunction(socket){
 	socket.on('gameCommands',(mes)=>{
 		if(allforked[roomname]!=undefined){
 			let message2server={gameID:IDs[gameID],data:mes}
+			if(mes.command=='message'){
+				if(JSON.parse(mes.data).message==='end'){
+					console.log(__line,''+socket.userData.username+" forced close");
+					message2server={closeout:true,ID:socket.userData.myIDinGame}
+					allforked[roomname].send(message2server)
+				}
+			}
 			console.log('sending comand to ',roomname,'and ID:',IDs[gameID])
 			//message2server.gameID=IDs[gameID] socket.userData.myIDinGame
 			console.log(message2server)

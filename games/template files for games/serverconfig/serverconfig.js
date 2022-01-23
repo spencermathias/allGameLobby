@@ -1,3 +1,3 @@
 module.exports={
 	serverPath:"gameServer.js",
-	clientFolder:'htmlGame'}
+	standAlonePort:8080}

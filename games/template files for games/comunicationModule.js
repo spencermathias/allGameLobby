@@ -10,7 +10,7 @@ catch(err){
 	mode="standAlone"
 }
 
-withParent=require('./comunicationModuleWithParent')
+var withParent=require('./comunicationModuleWithParent')
 
 function getproxyport(defaultport){
 	console.log(internalport)
@@ -22,6 +22,7 @@ function getproxyport(defaultport){
 }
 
 var uid =require( 'uid').uid;
+const EventEmitter = require('events');
 var IDs={}
 var allClients=[]
 novelCount=0
@@ -81,8 +82,8 @@ withoutParent.defaultSocket=function(gameID){
 		}
 	}
 }
-	
-withoutParent.createServer= function(serverConfgObject){
+
+withoutParent.createServer= function(serverConfgObject,closeCondition){
 	withoutParent.express = require("express");
 	withoutParent.http = require("http");
 	withoutParent.io = require("socket.io")
@@ -94,9 +95,13 @@ withoutParent.createServer= function(serverConfgObject){
 	withoutParent.port = serverConfgObject.standAlonePort;
 	withoutParent.server = withoutParent.http.createServer(withoutParent.app).listen(withoutParent.port,"0.0.0.0",511,function(){console.log("Server connected to socket: "+withoutParent.port);});//Server listens on the port 8124
 	withoutParent.io = withoutParent.io.listen(withoutParent.server);
+	//withoutParent.myEmiter = new EventEmiter()
+	//withoutParent.myEmiter.on('close',(gameID)=>{
+	//	if(closeCondition(gameID)){console.log('would have closed')}else{'would not have closed'}
+	//})
 	/*initializing the websockets communication , server instance has to be sent as the argument */
 	withoutParent.io.sockets.on("connection", function(socket) {
-		console.log(__line, "Connection with client " );
+		console.log("Connection with client " );
 		let gameID=uid()+novelCount++
 		IDs[gameID]=gameID
 		

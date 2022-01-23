@@ -1,4 +1,5 @@
 
+const EventEmitter = require('events');
 
 var withParent={
 	socketList:{},
@@ -37,9 +38,11 @@ var withParent={
 withParent.defaultSocket=function(gameID){
 	return{
 		id:gameID,
+		userName:gameID,
 		on: function(command,costomFunction){
 			let player=withParent.struct.sockets[gameID]
 			player[command]=costomFunction
+			console.log('lodded '+command)
 			if(arguments.length!=2){
 				console.log("currently you must have 2 arguments, the call and the function")
 			}
@@ -47,6 +50,10 @@ withParent.defaultSocket=function(gameID){
 		emit:function(command,data){
 			console.log('server sends out to player '+gameID+': ',{command:command,data:data})
 			process.send({playerID:gameID,command:command,data:data})
+		},
+		message:function(data){
+			withParent.message( gameID, "You: " + data, withParent.moduleColor);
+			withparent.message( {from:gameID}, "" + withparent.struct.sockets[gameID].userName + ": " + data.message, chatColor);
 		},
 		broadcast:{
 			id:{from:gameID},
@@ -58,18 +65,31 @@ withParent.defaultSocket=function(gameID){
 	}
 }
 
-withParent.createServer= function(serverConfgObject){
+withParent.createServer= function(serverConfgObject,closeCondition){
 	process.send({playerID:'use',path:"../template files for games/clientComms"})
+	withParent.myEmiter = new EventEmitter()
+	withParent.myEmiter.on('close',(gameID)=>{
+		if(closeCondition(gameID)){return process.exit(0)}else{'did not close'}
+	})
 	process.on('message', function(dataIn){
 		if(dataIn.debug==undefined){
-			console.log('current struct',withParent.struct.sockets)
-			if(withParent.struct.sockets[dataIn.gameID]==undefined){
-				let temp=withParent.defaultSocket(dataIn.gameID)
-				console.log('default Socket',temp)
-				withParent.struct.sockets[dataIn.gameID]=temp
-				withParent.struct.sockets.connection(withParent.struct.sockets[dataIn.gameID])
-				console.log('after connection',withParent.struct.sockets[dataIn.gameID])
+			if(dataIn.gameID!=undefined){
+				console.log('current struct',withParent.struct.sockets)
+				if(withParent.struct.sockets[dataIn.gameID]==undefined){
+					let temp=withParent.defaultSocket(dataIn.gameID)
+					//console.log('default Socket',temp)
+					withParent.struct.sockets[dataIn.gameID]=temp
+					withParent.struct.sockets.connection(withParent.struct.sockets[dataIn.gameID])
+					if(dataIn.data!=undefined && typeof withParent.struct.sockets[dataIn.gameID].userName=="string"){
+						withParent.struct.sockets[dataIn.gameID].userName=dataIn.data.name
+					}
+					//console.log('after connection',withParent.struct.sockets[dataIn.gameID])
+				}
 			}
+			if(dataIn.closeout){
+				if(closeCondition(dataIn.gameID)){return process.exit(0)}
+			}
+			console.log(dataIn)
 			withParent.runGameCommand(dataIn.gameID,dataIn.data)
 		}else{
 			try{
