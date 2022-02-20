@@ -29,7 +29,7 @@ function nameSite(nameOfYourGame){
 
 var canvas = document.getElementById("gameBoard");
 var ctx = canvas.getContext("2d");
-
+var selected=undefined
 
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
   if (typeof stroke == 'undefined') {
@@ -85,6 +85,7 @@ class Button {
 		this.width = width;
 		this.height = height;
 		this.clickArea = {minX: x - width/2, minY: y - height/2, maxX: x + width/2, maxY: y + height/2};
+		this.clickFunct=makedefaultclick(this.clickArea,this.click)
 	}
 	
 	draw(ctx){
@@ -129,27 +130,33 @@ function checkClick(event){
 	console.log('adjusted click: ', click);
 	for( i = 0; i < shapes.length; i += 1){
 		for(var j = 0; j < shapes[i].length; j++){
-			if( shapes[i][j].clickArea ){
-				area = shapes[i][j].clickArea;
-				//console.log(area);
-				if( click.x  < area.maxX){
-					if( click.x > area.minX){
-						if( click.y < area.maxY){
-							if( click.y > area.minY){
-								shapes[i][j].click()
-								foundClick = true;
-							}
-						}
-					}
-				}
+			if( shapes[i][j].clickFunct ){
+				foundClick=shapes[i][j].clickFunct(click)
+				if(foundClick){break;}
 			} else {
 				console.log('no click area');
 			}
 		}
-		if(foundClick){break;}
+		
 	}
 	if(!foundClick){
 		selected = undefined;
+	}
+}
+
+function makedefaultclick(area,thisclick){;
+	return (click)=>{
+		if( click.x  < area.maxX){
+			if( click.x > area.minX){
+				if( click.y < area.maxY){
+					if( click.y > area.minY){
+						thisclick()
+						return true;
+					}
+				}
+			}
+		}
+		return false
 	}
 }
 
@@ -177,7 +184,7 @@ function draw(){
 	//draw shapes
 	for( var i = shapes.length-1; i >= 0; i -= 1){
 		//if(i==0 && shapes[0].length > 0){debugger;}
-		for(var j = 0; j < shapes[i].length; j++){
+		for(var j = shapes[i].length-1; j >=0 ; j--){
 			shapes[i][j].draw(ctx);
 		}
 	}

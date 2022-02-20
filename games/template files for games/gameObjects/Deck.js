@@ -1,7 +1,14 @@
 // nodejs for a deck module. https://nodejs.org/docs/latest/api/modules.html
 var isClient=false
+const deckDict={novelcount:0}
+class IDset{
+	constructor(cardID,deckID){
+		this.cardID=cardID
+		this.deckID=deckID
+	}
+}
 class Deck{
-	constructor(cardDesc){
+	constructor(cardDesc,deckID){
 		this.cardDesc = cardDesc //CONST
 		this.propKeys = Object.keys(this.cardDesc) //CONST
 		
@@ -19,6 +26,14 @@ class Deck{
 		//for( let i = 0;i<this.totalCards;i++){this.pile.push(this.getProperties(i));}
 		//if(!isClient){this.shuffle(5)}
 		this.dfltCardProps=undefined
+		if(deckDict[deckID]!=undefined){
+			this.deckID=''+deckID+deckDict.novelcount
+			deckDict.novelcount++
+			deckDict[this.deckID]=this
+		}else{
+			this.deckID=''+deckID
+			deckDict[this.deckID]=this
+		}
 	}
 	
 	getProperties(cardNum){
@@ -26,6 +41,7 @@ class Deck{
 		
 		let cardProp = {}
 		cardProp.ID=cardNum
+		cardProp.deckID=this.deckID
 		for(let propIndex = 0; propIndex < this.propKeys.length; propIndex++){
 			let currentPropertyKey = this.propKeys[propIndex]  //'color'
 			let currentPropertyList = this.cardDesc[currentPropertyKey] //['green','red','blue']
@@ -77,6 +93,8 @@ class Pile{
 		for(let card of ArrayOfCards){
 			if(card instanceof Card){
 				this.cards.push(card)
+			}else if(typeof card=='Object'){		
+				this.cards.push(deckDict[card.deckID].makeCardObject(card.ID))
 			}
 		}
 		this.showOpps={
@@ -94,10 +112,11 @@ class Pile{
 			topCardOnRight:true
 		}
 		this.drawnCards=[]
+		
 	}
 	addPile(pile){
 		if(pile instanceof Pile){
-			while(pile.cards.length>0){this.cards.push(pile.cards.pop())}
+			while(pile.cards.length>0){this.cards.push(pile.cards.pop())}			
 		}
 		console.log('other pile is now empty')
 	}
@@ -116,7 +135,7 @@ class Pile{
 	}
 
 	returnCard(card){
-		if(typeof card=='card'){
+		if(card instanceof Card){
 			let index = Math.floor(Math.random()*this.cards.length)
 			this.cards.splice(index,0,card)
 		}
@@ -141,6 +160,9 @@ class Pile{
 			this.showOpps[prop]=showOpps[prop]
 		}
 		
+	}
+	clickFunct(click){
+		return this.drawnCards.some((card)=>{return card.clickFunct(click)})
 	}
 	
 	draw(ctx){
@@ -180,6 +202,11 @@ class Pile{
 		}
 		ctx.restore()
 	}
+	alertChange(funct){
+		if(typeof pilechange == 'function'){
+			pilechange(this,funct)
+		}
+	}
 }
 
 class Card {
@@ -196,7 +223,20 @@ class Card {
 		this.height = screenProps.scale*10*this.visuals.hwRatio;
 		this.clickArea = {minX: this.x - this.width/2, minY: this.y - this.height/2, maxX: this.x + this.width/2, maxY: this.y + this.height/2};
 	}
-	
+	clickFunct(click){
+		let area=this.clickArea
+		if( click.x  < area.maxX){
+			if( click.x > area.minX){
+				if( click.y < area.maxY){
+					if( click.y > area.minY){
+						this.click()
+						return true;
+					}
+				}
+			}
+		}
+		return false
+	}
 	place(loc){
 		this.loc=loc
 		this.updateSize(loc)
@@ -209,10 +249,8 @@ class Card {
 				ctx.fillStyle = this.visuals.fillColor;
 				ctx.strokeStyle = this.visuals.outlineColor;
 				ctx.beginPath();
-				ctx.rect( this.clickArea.minX, this.clickArea.minY, this.width, this.height)//, this.width/8, this.visuals.fillColor, this.visuals.outlineColor);
-                ctx.fill()
-                ctx.stroke()
-                //ctx.restore()
+				this.roundRect(ctx, this.clickArea.minX, this.clickArea.minY, this.width, this.height, this.width/8, this.visuals.fillColor, this.visuals.outlineColor);
+
 
 				//draw number
 				ctx.font = '' + this.visuals.fontSize + "px Arimo" //Arial Black, Gadget, Arial, sans-serif";
@@ -248,14 +286,14 @@ class Card {
 			}
 		}
 	}
-
+	
 	click(){
 		console.log('not overloaded yet')
 	}
 	
 	roundRect(ctx, x, y, width, height, radius, fill, stroke) {
   		ctx.save()
-  		ctx.translate(0,-y)
+  		//ctx.translate(0,-y)
 		if (typeof radius === 'undefined') {
 			radius = 5;
 		}
