@@ -7,6 +7,8 @@ class IDset{
 		this.deckID=deckID
 	}
 }
+
+
 class Deck{
 	constructor(cardDesc,deckID){
 		this.cardDesc = cardDesc //CONST
@@ -25,7 +27,6 @@ class Deck{
 		//this.pile =[]
 		//for( let i = 0;i<this.totalCards;i++){this.pile.push(this.getProperties(i));}
 		//if(!isClient){this.shuffle(5)}
-		this.dfltCardProps=undefined
 		if(deckDict[deckID]!=undefined){
 			this.deckID=''+deckID+deckDict.novelcount
 			deckDict.novelcount++
@@ -33,6 +34,13 @@ class Deck{
 		}else{
 			this.deckID=''+deckID
 			deckDict[this.deckID]=this
+		}
+		this.cardSettings = {
+			funct2changeCard:undefined,
+			click:function(){
+				console.log('not overloaded yet')
+			},
+			width:10
 		}
 	}
 	
@@ -55,31 +63,19 @@ class Deck{
 		}
 		return cardProp
 	}
-
 	
-	setDfltCardProps(width,funct2changePropsByCard){
-		//if(funct2changePropsByCard==undefined)
-		this.dfltCardProps={
-			width:width,
-			hwRatio:1.3,
-			text:'',
-			fontSize:50,
-			fillColor:'#ffe0b3',
-			outlineColor:'#000000',
-			textColor:'#000000',
-			textOutlineColor:'#000000',
-			textSlant:false,
-			funct2changePropsByCard:funct2changePropsByCard
-		}
-	}
+	
+	
 	makeCardObject(cardNum){
-		let dflt=this.dfltCardProps
-		let newProps=this.dfltCardProps.funct2changePropsByCard(this.getProperties(cardNum))
 		let cardVals=this.getProperties(cardNum)
+		
+		let newCard= new Card(cardNum,cardVals)
+		newCard.visuals.width=this.cardSettings.width
+		let newProps=this.cardSettings.funct2changeCard(this.getProperties(cardNum))
 		for(let prop in newProps){
-			dflt[prop]=newProps[prop]
+			newCard.visuals[prop]=newProps[prop]
 		}
-		let newCard= new Card(cardNum,cardVals,{...dflt})
+		newCard.click=this.cardSettings.click
 		return newCard
 	}
 	getCards(cardNums){
@@ -210,10 +206,24 @@ class Pile{
 }
 
 class Card {
-	constructor(cardID,properties,visuals){
+	constructor(cardID,properties){
 		this.cardID=cardID
 		this.props=properties
-		this.visuals=visuals
+		if(isClient){
+			this.visuals={
+				width:10,
+				hwRatio:1.3,
+				text:'',
+				fontSize:50,
+				fillColor:'#ffe0b3',
+				outlineColor:'#000000',
+				textColor:'#000000',
+				textOutlineColor:'#000000',
+				textSlant:false,
+			}
+		}else{
+			this.visuals={}
+		}
 	}
 	
 	updateSize(screenProps){
@@ -287,10 +297,6 @@ class Card {
 		}
 	}
 	
-	click(){
-		console.log('not overloaded yet')
-	}
-	
 	roundRect(ctx, x, y, width, height, radius, fill, stroke) {
   		ctx.save()
   		//ctx.translate(0,-y)
@@ -342,9 +348,12 @@ class Card {
 	}
 } 
 
+
+
 //try/catch to allow use on client and server side
 try {
 	module.exports = Deck
+	
 } catch (err){
 	isClient=true
 	console.log("you must be client side!")
