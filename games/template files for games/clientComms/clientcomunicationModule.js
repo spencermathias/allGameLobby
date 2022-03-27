@@ -31,9 +31,9 @@ function comms(address){
 			}else{
 				localStorage.commsID=responseData
 				tcomms.id=responseData
+				tcomms.functlist.connect()
 			}
 		});
-		tcomms.functlist.connect()
 	});
 	
 	tcomms.io.on('forward to room',(path)=>{

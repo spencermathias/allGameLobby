@@ -119,10 +119,15 @@ withoutParent.createServer= function(serverConfgObject,closeCondition){
 			if(withoutParent.socketList[gameID]==undefined){
 				console.log(socket.userData)
 				withoutParent.struct.sockets[gameID]=withoutParent.defaultSocket(gameID)
+				withoutParent.socketList[gameID]=socket
+				withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
+			}else{
+				let player=withoutParent.struct.sockets[gameID]
+				withoutParent.socketList[gameID]=socket
+				withoutParent.runGameCommand(socket,data)
 			}
-			withoutParent.socketList[gameID]=socket
+			
 			console.log(withoutParent.struct.sockets[gameID])
-			withoutParent.struct.connection(withoutParent.struct.sockets[gameID])
 			callback(responseData);
 		});
 		
@@ -143,11 +148,7 @@ withoutParent.createServer= function(serverConfgObject,closeCondition){
 		});
 		withoutParent.savedcommands=[]
 		socket.on("gameCommands",function(data){
-			if(socket.userData==undefined){
-				withoutParent.savedcommands.push({socket:socket,comm:data})
-			}else{
-				withoutParent.runGameCommand(socket,data)
-			}
+			withoutParent.runGameCommand(socket,data)
 		})
 		
 	})
